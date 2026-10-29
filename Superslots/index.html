@@ -252,19 +252,19 @@
   #payments::before,#redemption::before,#contact::before,#responsible::before{inset:0;z-index:-1;opacity:0.55;}
 
   /* ---------- Games ---------- */
-  /* Auto-scrolling slider: cards are duplicated by script so the loop is seamless */
+  /* Slider: auto-scrolls right to left by script, and can be swiped or dragged.
+     Cards are duplicated by script so the loop is seamless. */
   .games-slider{
-    overflow:hidden;padding:14px 0 30px;
+    overflow-x:auto;overflow-y:hidden;padding:14px 0 30px;
+    scrollbar-width:none;cursor:grab;
     -webkit-mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent);
             mask-image:linear-gradient(90deg,transparent,#000 6%,#000 94%,transparent);
   }
-  .games-grid{display:flex;width:max-content;animation:games-marquee 40s linear infinite;}
+  .games-slider::-webkit-scrollbar{display:none;}
+  .games-slider.dragging{cursor:grabbing;user-select:none;}
+  .games-slider img{-webkit-user-drag:none;user-select:none;}
+  .games-grid{display:flex;width:max-content;}
   .games-grid > .game-card{flex:none;width:270px;margin-right:26px;}
-  .games-slider:hover .games-grid{animation-play-state:paused;}
-  @keyframes games-marquee{
-    from{transform:translateX(0);}
-    to{transform:translateX(-50%);}
-  }
 
   .game-card{
     padding:14px 14px 20px;border-radius:22px;
@@ -664,7 +664,6 @@
     .section-head p{font-size:14.5px;margin-top:10px;}
 
     /* Games: 2-up compact cards */
-    .games-grid{animation-duration:28s;}
     .games-grid > .game-card{width:172px;margin-right:12px;}
     .game-card{padding:8px 8px 12px;border-radius:16px;border-width:2px;}
     .game-card .art{border-radius:10px;}
@@ -743,7 +742,6 @@
   @media (prefers-reduced-motion: reduce){
     html{scroll-behavior:auto;}
     *{transition:none !important;animation:none !important;}
-    .games-slider{overflow-x:auto;}
   }
 
   /* ---------- Artwork ---------- */
@@ -1023,7 +1021,7 @@
       <div class="hero-facts">
         <div class="fact"><div class="fact-title gold-text">$3</div><div class="fact-label">Free Play &mdash; Win Real Cash</div></div>
         <div class="fact"><div class="fact-title gold-text">Instant</div><div class="fact-label">Cashouts, Once Verified</div></div>
-        <div class="fact"><div class="fact-title gold-text">24/7</div><div class="fact-label">Human Support</div></div>
+        <div class="fact"><div class="fact-title gold-text">24/7</div><div class="fact-label">Live Agent Support</div></div>
       </div>
     </div>
     <div class="hero-art">
@@ -1401,6 +1399,66 @@
       copy.querySelectorAll('a').forEach(function(a){ a.setAttribute('tabindex', '-1'); });
       track.appendChild(copy);
     });
+
+    /* Auto-scroll right to left; pause while the visitor hovers, drags or swipes */
+    var slider = track.parentElement;
+    var SPEED = window.innerWidth <= 560 ? 40 : 50; // pixels per second
+    var autoMotion = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var pos = 0, last = null, pausedUntil = 0, hovering = false, dragging = false;
+    var half = function(){ return track.scrollWidth / 2; };
+
+    function wrap(){
+      var h = half();
+      if (slider.scrollLeft >= h) slider.scrollLeft -= h;
+      else if (slider.scrollLeft <= 0) slider.scrollLeft += h;
+    }
+    function step(now){
+      if (last !== null && autoMotion && !hovering && !dragging && now > pausedUntil){
+        pos += SPEED * (now - last) / 1000;
+        if (pos >= half()) pos -= half();
+        slider.scrollLeft = pos;
+      } else {
+        pos = slider.scrollLeft;
+      }
+      last = now;
+      requestAnimationFrame(step);
+    }
+    function pauseBriefly(){ pausedUntil = performance.now() + 2500; }
+
+    slider.addEventListener('scroll', function(){ if (dragging || performance.now() < pausedUntil) wrap(); });
+    slider.addEventListener('mouseenter', function(){ hovering = true; });
+    slider.addEventListener('mouseleave', function(){ hovering = false; });
+    slider.addEventListener('touchstart', pauseBriefly, { passive: true });
+    slider.addEventListener('touchmove', pauseBriefly, { passive: true });
+    slider.addEventListener('wheel', pauseBriefly, { passive: true });
+
+    /* Mouse drag (touch screens use native swiping) */
+    var startX = 0, startLeft = 0, moved = false;
+    slider.addEventListener('pointerdown', function(e){
+      if (e.pointerType !== 'mouse' || e.button !== 0) return;
+      dragging = true; moved = false;
+      startX = e.clientX; startLeft = slider.scrollLeft;
+      slider.classList.add('dragging');
+    });
+    window.addEventListener('pointermove', function(e){
+      if (!dragging) return;
+      var dx = e.clientX - startX;
+      if (Math.abs(dx) > 5) moved = true;
+      slider.scrollLeft = startLeft - dx;
+    });
+    window.addEventListener('pointerup', function(){
+      if (!dragging) return;
+      dragging = false;
+      slider.classList.remove('dragging');
+      pauseBriefly();
+    });
+    /* A drag should not count as a click on a card button */
+    slider.addEventListener('click', function(e){
+      if (moved){ e.preventDefault(); e.stopPropagation(); moved = false; }
+    }, true);
+
+    slider.scrollLeft = 1;
+    requestAnimationFrame(step);
   })();
 
   /* Side menu */
